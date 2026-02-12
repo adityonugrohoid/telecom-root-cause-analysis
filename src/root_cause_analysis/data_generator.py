@@ -25,11 +25,15 @@ class TelecomDataGenerator:
     def generate(self) -> pd.DataFrame:
         raise NotImplementedError("Subclasses must implement generate()")
 
-    def generate_sinr(self, n: int, base_sinr_db: float = 10.0, noise_std: float = 5.0) -> np.ndarray:
+    def generate_sinr(
+        self, n: int, base_sinr_db: float = 10.0, noise_std: float = 5.0
+    ) -> np.ndarray:
         sinr = self.rng.normal(base_sinr_db, noise_std, n)
         return np.clip(sinr, -5, 25)
 
-    def sinr_to_throughput(self, sinr_db: np.ndarray, network_type: np.ndarray, noise_factor: float = 0.2) -> np.ndarray:
+    def sinr_to_throughput(
+        self, sinr_db: np.ndarray, network_type: np.ndarray, noise_factor: float = 0.2
+    ) -> np.ndarray:
         sinr_linear = 10 ** (sinr_db / 10)
         capacity_factor = np.log2(1 + sinr_linear)
         max_throughput = np.where(network_type == "5G", 300, 50)
@@ -51,13 +55,21 @@ class TelecomDataGenerator:
         congestion = congestion + noise
         return np.clip(congestion, 0, 1)
 
-    def congestion_to_latency(self, congestion: np.ndarray, base_latency_ms: float = 20) -> np.ndarray:
-        latency = base_latency_ms * (1 + 5 * congestion ** 2)
+    def congestion_to_latency(
+        self, congestion: np.ndarray, base_latency_ms: float = 20
+    ) -> np.ndarray:
+        latency = base_latency_ms * (1 + 5 * congestion**2)
         jitter = self.rng.normal(0, 5, len(latency))
         latency = latency + jitter
         return np.clip(latency, 10, 300)
 
-    def compute_qoe_mos(self, throughput_mbps: np.ndarray, latency_ms: np.ndarray, packet_loss_pct: np.ndarray, app_type: np.ndarray) -> np.ndarray:
+    def compute_qoe_mos(
+        self,
+        throughput_mbps: np.ndarray,
+        latency_ms: np.ndarray,
+        packet_loss_pct: np.ndarray,
+        app_type: np.ndarray,
+    ) -> np.ndarray:
         mos_throughput = 1 + 4 * (1 - np.exp(-throughput_mbps / 10))
         latency_penalty = np.clip(latency_ms / 100, 0, 2)
         loss_penalty = packet_loss_pct / 2
@@ -134,9 +146,7 @@ class RCADataGenerator(TelecomDataGenerator):
         new_idx = int(np.clip(idx + drop + jitter, 0, len(self._SEVERITY_ORDER) - 1))
         return self._SEVERITY_ORDER[new_idx]
 
-    def _generate_incident(
-        self, incident_id: int, base_timestamp: pd.Timestamp
-    ) -> list:
+    def _generate_incident(self, incident_id: int, base_timestamp: pd.Timestamp) -> list:
         """Generate all events for a single incident.
 
         Returns a list of dicts, one per event.
@@ -190,25 +200,20 @@ class RCADataGenerator(TelecomDataGenerator):
                 # KPI deltas decay with distance from root cause
                 decay = np.exp(-0.15 * pos)
                 sinr_delta = round(
-                    root_sinr_delta * decay
-                    + float(self.rng.normal(0, 1)),
+                    root_sinr_delta * decay + float(self.rng.normal(0, 1)),
                     2,
                 )
                 throughput_delta = round(
-                    root_throughput_delta * decay
-                    + float(self.rng.normal(0, 3)),
+                    root_throughput_delta * decay + float(self.rng.normal(0, 3)),
                     2,
                 )
                 latency_delta = round(
-                    root_latency_delta * decay
-                    + float(self.rng.normal(0, 5)),
+                    root_latency_delta * decay + float(self.rng.normal(0, 5)),
                     2,
                 )
 
                 # Affected cells spread as the cascade propagates
-                affected_cells = int(
-                    np.clip(1 + self.rng.poisson(pos * 0.5), 1, self.n_cells)
-                )
+                affected_cells = int(np.clip(1 + self.rng.poisson(pos * 0.5), 1, self.n_cells))
 
                 # Cell may differ from the primary cell for later events
                 if self.rng.random() < 0.3:
@@ -268,14 +273,11 @@ class RCADataGenerator(TelecomDataGenerator):
         df.insert(0, "event_id", range(1, len(df) + 1))
 
         # Sort by incident then sequence position for readability
-        df = df.sort_values(
-            ["incident_id", "event_sequence_position"]
-        ).reset_index(drop=True)
+        df = df.sort_values(["incident_id", "event_sequence_position"]).reset_index(drop=True)
 
         print(f"Generated {len(df):,} events across {self.n_incidents:,} incidents")
         print(
-            f"Root cause events: {df['is_root_cause'].sum():,} "
-            f"({df['is_root_cause'].mean():.2%})"
+            f"Root cause events: {df['is_root_cause'].sum():,} ({df['is_root_cause'].mean():.2%})"
         )
         print(f"Event types: {df['event_type'].value_counts().to_dict()}")
         return df

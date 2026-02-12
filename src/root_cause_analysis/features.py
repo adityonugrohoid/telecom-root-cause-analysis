@@ -28,7 +28,9 @@ class FeatureEngineer:
         """
         self.config = config or FEATURE_CONFIG
 
-    def create_temporal_features(self, df: pd.DataFrame, timestamp_col: str = "timestamp") -> pd.DataFrame:
+    def create_temporal_features(
+        self, df: pd.DataFrame, timestamp_col: str = "timestamp"
+    ) -> pd.DataFrame:
         """
         Create time-based features from timestamp.
 
@@ -47,18 +49,13 @@ class FeatureEngineer:
         df["day_of_week"] = df[timestamp_col].dt.dayofweek
         df["is_weekend"] = (df["day_of_week"] >= 5).astype(int)
         df["is_peak_hour"] = (
-            ((df["hour"] >= 9) & (df["hour"] <= 11)) |
-            ((df["hour"] >= 18) & (df["hour"] <= 21))
+            ((df["hour"] >= 9) & (df["hour"] <= 11)) | ((df["hour"] >= 18) & (df["hour"] <= 21))
         ).astype(int)
 
         return df
 
     def create_rolling_aggregates(
-        self,
-        df: pd.DataFrame,
-        group_col: str,
-        value_cols: List[str],
-        windows: List[int] = [7, 30]
+        self, df: pd.DataFrame, group_col: str, value_cols: List[str], windows: List[int] = [7, 30]
     ) -> pd.DataFrame:
         """
         Create rolling window aggregations.
@@ -128,9 +125,9 @@ class FeatureEngineer:
         kpi_cols = {"sinr_delta", "throughput_delta", "latency_delta"}
         if kpi_cols.issubset(df.columns):
             df["kpi_impact_score"] = (
-                df["sinr_delta"].abs() +
-                df["throughput_delta"].abs() / 10 +
-                df["latency_delta"].abs() / 50
+                df["sinr_delta"].abs()
+                + df["throughput_delta"].abs() / 10
+                + df["latency_delta"].abs() / 50
             )
 
         # Cascade depth ratio: how deep in the cascade this event sits
@@ -146,10 +143,7 @@ class FeatureEngineer:
         return df
 
     def encode_categorical(
-        self,
-        df: pd.DataFrame,
-        categorical_cols: List[str] = None,
-        method: str = "onehot"
+        self, df: pd.DataFrame, categorical_cols: List[str] = None, method: str = "onehot"
     ) -> Tuple[pd.DataFrame, dict]:
         """
         Encode categorical features.
@@ -185,11 +179,7 @@ class FeatureEngineer:
 
         return df, encoding_map
 
-    def handle_missing_values(
-        self,
-        df: pd.DataFrame,
-        strategy: str = "mean"
-    ) -> pd.DataFrame:
+    def handle_missing_values(self, df: pd.DataFrame, strategy: str = "mean") -> pd.DataFrame:
         """
         Handle missing values.
 
@@ -218,7 +208,7 @@ class FeatureEngineer:
         df: pd.DataFrame,
         create_temporal: bool = True,
         create_interactions: bool = True,
-        encode_cats: bool = True
+        encode_cats: bool = True,
     ) -> pd.DataFrame:
         """
         Run the complete feature engineering pipeline.

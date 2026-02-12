@@ -25,7 +25,6 @@ def sample_data():
 
 
 class TestDataQuality:
-
     def test_no_missing_values(self, sample_data):
         critical_cols = ["event_id", "incident_id", "alarm_severity", "is_root_cause"]
         for col in critical_cols:
@@ -64,10 +63,13 @@ class TestDataQuality:
 
 
 class TestDataGenerator:
-
     def test_generator_reproducibility(self):
-        gen1 = RCADataGenerator(seed=42, n_samples=1000, n_incidents=10, events_per_incident=5, n_cells=3)
-        gen2 = RCADataGenerator(seed=42, n_samples=1000, n_incidents=10, events_per_incident=5, n_cells=3)
+        gen1 = RCADataGenerator(
+            seed=42, n_samples=1000, n_incidents=10, events_per_incident=5, n_cells=3
+        )
+        gen2 = RCADataGenerator(
+            seed=42, n_samples=1000, n_incidents=10, events_per_incident=5, n_cells=3
+        )
         df1 = gen1.generate()
         df2 = gen2.generate()
         pd.testing.assert_frame_equal(df1, df2)
