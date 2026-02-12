@@ -150,70 +150,114 @@ class RCADataGenerator(TelecomDataGenerator):
         """Generate all events for a single incident.
 
         Returns a list of dicts, one per event.
+
+        Realism features that make RCA non-trivial:
+        - Root cause may not be the absolute first event (small lag noise)
+        - Root cause severity occasionally drops (e.g. config_error -> minor)
+        - Early cascade events can mimic root-cause characteristics
+        - KPI deltas overlap between root cause and early cascade events
         """
         n_events = self.events_per_incident
         root_cause_type = self.rng.choice(self.event_types)
         root_severity = self._ROOT_CAUSE_SEVERITY.get(root_cause_type, "major")
         primary_cell_id = self.rng.integers(1, self.n_cells + 1)
 
-        # KPI deltas for the root cause (large impact)
+        # ~20% of the time, root cause severity is degraded by one level
+        # (e.g. monitoring system misclassifies severity)
+        if self.rng.random() < 0.20:
+            sev_idx = self._SEVERITY_ORDER.index(root_severity)
+            root_severity = self._SEVERITY_ORDER[min(sev_idx + 1, len(self._SEVERITY_ORDER) - 1)]
+
+        # KPI deltas for the root cause (large impact, but with variance)
         root_sinr_delta = float(self.rng.uniform(-15, -5))
         root_throughput_delta = float(self.rng.uniform(-80, -30))
         root_latency_delta = float(self.rng.uniform(30, 150))
 
+        # Root cause time lag: usually near 0, but sometimes delayed
+        # (root cause detected a few seconds after first cascade symptom)
+        root_lag = int(self.rng.exponential(scale=3))  # mean ~3s, often 0-1
+        root_lag = min(root_lag, 15)
+
+        # Pick a random position for the root cause within the first few
+        # events (~70% at position 0, ~20% at 1, ~10% at 2)
+        rc_position = int(self.rng.choice([0, 0, 0, 0, 0, 0, 0, 1, 1, 2]))
+
         events = []
 
         for pos in range(n_events):
-            if pos == 0:
+            if pos == rc_position:
                 # --- Root cause event ---
+                event_ts = base_timestamp + pd.Timedelta(seconds=root_lag)
                 event = {
                     "incident_id": incident_id,
-                    "event_sequence_position": 0,
-                    "timestamp": base_timestamp,
+                    "event_sequence_position": pos,
+                    "timestamp": event_ts,
                     "cell_id": primary_cell_id,
                     "event_type": root_cause_type,
                     "alarm_severity": root_severity,
-                    "time_lag_seconds": 0,
+                    "time_lag_seconds": root_lag,
                     "is_root_cause": 1,
                     "affected_cells": 1,
-                    "sinr_delta": round(root_sinr_delta, 2),
-                    "throughput_delta": round(root_throughput_delta, 2),
-                    "latency_delta": round(root_latency_delta, 2),
+                    "sinr_delta": round(root_sinr_delta + float(self.rng.normal(0, 1.5)), 2),
+                    "throughput_delta": round(
+                        root_throughput_delta + float(self.rng.normal(0, 5)), 2
+                    ),
+                    "latency_delta": round(root_latency_delta + float(self.rng.normal(0, 8)), 2),
                 }
             else:
                 # --- Cascading / secondary event ---
+                # Effective position: distance from root cause in the cascade
+                effective_pos = abs(pos - rc_position)
+
                 # Time lag increases with position (5-300 seconds range)
-                lag = int(
-                    np.clip(
-                        self.rng.exponential(scale=30) + pos * 5,
-                        5,
-                        300,
+                # Early cascade events (pos < rc_position) get small lags
+                if pos < rc_position:
+                    # Symptom detected before root cause is identified
+                    lag = int(np.clip(self.rng.exponential(scale=5), 0, root_lag))
+                else:
+                    lag = int(
+                        np.clip(
+                            self.rng.exponential(scale=30) + effective_pos * 5,
+                            root_lag + 1,
+                            300,
+                        )
                     )
-                )
                 event_ts = base_timestamp + pd.Timedelta(seconds=lag)
 
                 # Cascading events may be of a different type
                 cascade_type = self.rng.choice(self.event_types)
 
-                severity = self._cascade_severity(root_severity, pos)
+                severity = self._cascade_severity(root_severity, effective_pos)
 
-                # KPI deltas decay with distance from root cause
-                decay = np.exp(-0.15 * pos)
+                # Early cascade events (first 3 after root) have overlapping
+                # KPI deltas with the root cause to create ambiguity
+                if effective_pos <= 2:
+                    overlap_factor = 0.7 + 0.3 * self.rng.random()
+                    noise_scale = 1.5
+                else:
+                    decay = np.exp(-0.15 * effective_pos)
+                    overlap_factor = decay
+                    noise_scale = 1.0
+
                 sinr_delta = round(
-                    root_sinr_delta * decay + float(self.rng.normal(0, 1)),
+                    root_sinr_delta * overlap_factor + float(self.rng.normal(0, 2 * noise_scale)),
                     2,
                 )
                 throughput_delta = round(
-                    root_throughput_delta * decay + float(self.rng.normal(0, 3)),
+                    root_throughput_delta * overlap_factor
+                    + float(self.rng.normal(0, 6 * noise_scale)),
                     2,
                 )
                 latency_delta = round(
-                    root_latency_delta * decay + float(self.rng.normal(0, 5)),
+                    root_latency_delta * overlap_factor
+                    + float(self.rng.normal(0, 10 * noise_scale)),
                     2,
                 )
 
                 # Affected cells spread as the cascade propagates
-                affected_cells = int(np.clip(1 + self.rng.poisson(pos * 0.5), 1, self.n_cells))
+                affected_cells = int(
+                    np.clip(1 + self.rng.poisson(effective_pos * 0.5), 1, self.n_cells)
+                )
 
                 # Cell may differ from the primary cell for later events
                 if self.rng.random() < 0.3:

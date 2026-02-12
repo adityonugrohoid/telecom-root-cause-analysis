@@ -47,10 +47,10 @@ Domain physics: root causes appear first (lowest time lag), carry the highest se
 
 ## Key Findings
 
-- **Accuracy@1:** 1.00, **Accuracy@3:** 1.00, **MRR:** 1.00 on held-out test set (incident-level split, 100 test incidents)
-- **Top features:** `time_lag_seconds` and `severity_encoded` dominate feature importance
+- **Accuracy@1:** 0.91, **Accuracy@3:** 1.00, **MRR:** 0.955 on held-out test set (incident-level split, 100 test incidents)
+- **Top features:** `throughput_delta`, `latency_delta`, and `time_lag_seconds` dominate SHAP importance
 - Incident-level GroupShuffleSplit ensures every test incident retains all its events including the root cause
-- Cascade depth provides meaningful lift beyond time lag alone
+- Root cause ambiguity: root causes don't always appear first or with highest severity, forcing the model to learn deeper patterns beyond simple heuristics
 
 ## Quick Start
 
