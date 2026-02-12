@@ -119,6 +119,16 @@ class XGBoostRCAClassifier(BaseModel):
         self.is_trained = True
         print(f"XGBoost RCA classifier trained successfully ({num_classes} classes).")
 
+    def predict(self, X):
+        if not self.is_trained:
+            raise ValueError("Model must be trained before making predictions")
+        preds = self.model.predict(X)
+        # multi:softprob may return a 2D probability array from predict();
+        # convert to class labels in that case.
+        if preds.ndim == 2:
+            return np.argmax(preds, axis=1)
+        return preds
+
     def predict_proba(self, X):
         if not self.is_trained:
             raise ValueError("Model must be trained before making predictions")

@@ -47,9 +47,9 @@ Domain physics: root causes appear first (lowest time lag), carry the highest se
 
 ## Key Findings
 
-- **Accuracy@3:** ~0.70 on held-out test set
+- **Accuracy@1:** 1.00, **Accuracy@3:** 1.00, **MRR:** 1.00 on held-out test set (incident-level split, 100 test incidents)
 - **Top features:** `time_lag_seconds` and `severity_encoded` dominate feature importance
-- Events with lag=0 and CRITICAL severity are correctly identified as root causes in the majority of incidents
+- Incident-level GroupShuffleSplit ensures every test incident retains all its events including the root cause
 - Cascade depth provides meaningful lift beyond time lag alone
 
 ## Quick Start
