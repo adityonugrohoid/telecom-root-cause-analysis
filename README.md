@@ -1,113 +1,220 @@
+<div align="center">
+
 # Telecom Root Cause Analysis
 
-![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue)
-![uv](https://img.shields.io/badge/uv-package%20manager-blueviolet)
-![License: MIT](https://img.shields.io/badge/License-MIT-green)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![XGBoost](https://img.shields.io/badge/XGBoost-1.7%2B-orange.svg)](https://xgboost.readthedocs.io/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-## Business Context
+**Rank causal candidates in telecom alarm cascades using XGBoost, achieving Accuracy@1 of 0.91 on incident-level test splits.**
 
-When network incidents occur, alarm storms generate hundreds of events. NOC teams waste hours correlating alarms manually. ML-driven RCA ranks causal candidates to identify the root cause within seconds.
+[Getting Started](#getting-started) | [Usage](#usage) | [Methodology](#methodology)
 
-## Problem Framing
+</div>
 
-Multi-class classification using XGBoost.
+---
 
-- **Target:** `is_root_cause`
-- **Primary Metrics:** Accuracy@K, MRR (Mean Reciprocal Rank)
-- **Challenges:**
-  - Highly imbalanced (1 root cause per ~20 cascading events)
-  - Temporal ordering is critical for causal inference
-  - Alarm severity hierarchy must be encoded meaningfully
+## Table of Contents
 
-## Data Engineering
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [The Problem](#the-problem)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+- [Usage](#usage)
+- [Methodology](#methodology)
+- [Results](#results)
+- [Data Engineering](#data-engineering)
+- [Project Structure](#project-structure)
+- [Testing](#testing)
+- [Related Projects](#related-projects)
+- [License](#license)
+- [Author](#author)
 
-Incident-event cascading data structured around causal chains:
+## The Problem
 
-- Each incident contains **1 root cause event** (lag=0) and multiple **cascading downstream events** with increasing time lags and decreasing severity
-- **Severity encoding** -- hierarchical mapping from CRITICAL to INFO
-- **Temporal features** -- time lag from first alarm, inter-event gaps
-- **Cascade depth** -- topological distance from the originating fault
+### Alarm Storm Correlation
 
-Domain physics: root causes appear first (lowest time lag), carry the highest severity, and trigger predictable downstream alarm patterns.
+During network incidents, a single root fault triggers cascades of hundreds of downstream alarms. NOC engineers spend hours manually correlating events to identify the originating cause, slowing incident resolution and increasing MTTR.
+
+### The Solution
+
+Multi-class XGBoost classifier with per-incident probability ranking. Each alarm event is scored against engineered temporal and severity features; the highest-probability event across a cascade is surfaced as the root cause candidate.
+
+## Features
+
+- **Incident-level ranking** - per-incident GroupShuffleSplit prevents data leakage across alarm cascades
+- **SHAP interpretability** - feature-level explanations for every root cause prediction
+- **Domain-physics features** - time lag, severity encoding, cascade depth, and alarm co-occurrence signals
+- **Custom ranking metrics** - Accuracy@1, Accuracy@3, Accuracy@5, and MRR evaluated per incident
+- **Synthetic data generator** - reproducible `RCADataGenerator` producing 500 incidents x 20 events each
+- **Pytest data-quality suite** - validates schema, value ranges, and one-root-cause-per-incident invariant
+
+## Tech Stack
+
+| Component | Technology |
+|-----------|------------|
+| Language | Python 3.11+ |
+| ML Model | XGBoost 1.7 (multi:softprob objective) |
+| Interpretability | SHAP 0.42+ |
+| Feature Engineering | pandas, NumPy, NetworkX |
+| Notebook | Jupyter Lab |
+| Packaging | uv + pyproject.toml |
+| Testing | pytest + pytest-cov |
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.11+
+- uv package manager
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+### Installation
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/adityonugrohoid/telecom-root-cause-analysis.git
+   cd telecom-root-cause-analysis
+   ```
+
+2. Install dependencies:
+   ```bash
+   uv sync
+   ```
+
+3. Generate synthetic data:
+   ```bash
+   uv run python -m root_cause_analysis.data_generator
+   ```
+
+## Usage
+
+Run the full analysis in Jupyter Lab (recommended):
+
+```bash
+uv run jupyter lab
+```
+
+Open `notebooks/02_root_cause_analysis.ipynb` and run all cells. The notebook executes data generation, feature engineering, XGBoost training, and SHAP analysis end-to-end.
+
+To execute non-interactively:
+
+```bash
+uv run jupyter nbconvert --to notebook --execute notebooks/02_root_cause_analysis.ipynb
+```
+
+Engineer features separately:
+
+```bash
+uv run python -m root_cause_analysis.features
+```
 
 ## Methodology
 
-- XGBoost multi-class classifier with severity-aware encoding
-- **Feature groups:**
-  - `time_lag_seconds` -- elapsed time from incident start
-  - `severity_encoded` -- ordinal encoding of alarm severity
-  - Cascade depth and branching factor
-  - Alarm type co-occurrence within the incident window
-- **Custom evaluation metrics:**
-  - Accuracy@1 -- is the top-ranked candidate the true root cause?
-  - Accuracy@3 -- is the true root cause in the top 3?
-  - Accuracy@5 -- is the true root cause in the top 5?
-  - MRR -- mean reciprocal rank across all incidents
-- Per-incident ranking via predicted probability scores
+### Problem Framing
 
-## Key Findings
+| Attribute | Value |
+|-----------|-------|
+| Problem Type | Multi-class classification with per-incident ranking |
+| Target Variable | `is_root_cause` (binary per event, ranked per incident) |
+| Primary Metric | Accuracy@1 (top-ranked candidate = true root cause) |
+| Key Challenge | 1 root cause per ~20 cascading events; temporal ordering not always deterministic |
 
-- **Accuracy@1:** 0.91, **Accuracy@3:** 1.00, **MRR:** 0.955 on held-out test set (incident-level split, 100 test incidents)
-- **Top features:** `throughput_delta`, `latency_delta`, and `time_lag_seconds` dominate SHAP importance
-- Incident-level GroupShuffleSplit ensures every test incident retains all its events including the root cause
-- Root cause ambiguity: root causes don't always appear first or with highest severity, forcing the model to learn deeper patterns beyond simple heuristics
+### Training Approach
 
-## Quick Start
+| Parameter | Value |
+|-----------|-------|
+| Algorithm | XGBoost `multi:softprob`, max_depth=6, lr=0.1, n_estimators=200 |
+| Features | 7 numerical + 3 categorical (ordinal-encoded) |
+| Validation | Incident-level GroupShuffleSplit (100 test incidents) |
+| Baseline | Always-predict-first-alarm heuristic |
 
-```bash
-# Clone the repository
-git clone https://github.com/adityonugrohoid/telecom-ml-portfolio.git
-cd telecom-ml-portfolio/02-root-cause-analysis
+Feature groups:
+- `time_lag_seconds` - elapsed time from incident start
+- `severity_encoded` - ordinal mapping from CRITICAL (4) to INFO (1)
+- `throughput_delta`, `latency_delta`, `sinr_delta` - per-event KPI deltas
+- `alarm_count`, `affected_cells` - cascade breadth signals
+- `event_sequence_position` - topological order within cascade
 
-# Install dependencies
-uv sync
+## Results
 
-# Generate synthetic data
-uv run python generate_data.py
+### Key Findings
 
-# Run the notebook
-uv run jupyter lab notebooks/
-```
+| Metric | Score | Notes |
+|--------|-------|-------|
+| Accuracy@1 | 0.91 | Top-ranked candidate = true root cause |
+| Accuracy@3 | 1.00 | True root cause in top 3 candidates |
+| MRR | 0.955 | Mean reciprocal rank across 100 test incidents |
+
+### Top Predictors
+
+1. `throughput_delta` - largest KPI deviation signals originating fault
+2. `latency_delta` - latency spike precedes downstream alarm propagation
+3. `time_lag_seconds` - root causes appear earliest in cascade (though not always first)
+
+## Data Engineering
+
+| Attribute | Value |
+|-----------|-------|
+| Data Source | Synthetic (`RCADataGenerator`, seed=42) |
+| Records | 500 incidents x ~20 events = ~10,000 rows |
+| Features | 7 numerical, 3 categorical, 1 datetime |
+| Domain Physics | Root causes carry highest severity and lowest time lag; downstream alarms propagate with increasing lag and decreasing severity |
+
+Event types: `hardware_failure`, `software_bug`, `config_error`, `overload`, `external`. Severity levels: `critical`, `major`, `minor`, `warning` with ordinal encoding.
 
 ## Project Structure
 
 ```
-02-root-cause-analysis/
-├── README.md
-├── pyproject.toml
+telecom-root-cause-analysis/
 ├── notebooks/
-│   └── 01_root_cause_analysis.ipynb
+│   └── 02_root_cause_analysis.ipynb   # End-to-end analysis notebook
 ├── src/
 │   └── root_cause_analysis/
-│       ├── __init__.py
-│       ├── data.py
-│       ├── features.py
-│       ├── model.py
-│       └── evaluate.py
-├── data/
-│   └── .gitkeep
-├── models/
-│   └── .gitkeep
-├── generate_data.py
-└── tests/
-    └── .gitkeep
+│       ├── config.py                  # Centralized config (paths, model params)
+│       ├── data_generator.py          # RCADataGenerator (synthetic alarm cascades)
+│       ├── features.py                # Feature engineering pipeline
+│       └── models.py                  # BaseModel + XGBoost training/evaluation
+├── tests/
+│   └── test_data_quality.py           # Schema, value range, and invariant tests
+├── data/                              # Runtime artifacts (gitignored)
+├── pyproject.toml                     # uv + hatchling build config
+└── QUICKSTART.md                      # 5-minute setup reference
 ```
+
+## Testing
+
+```bash
+# Run all tests
+uv run pytest tests/ -v
+
+# Run with coverage
+uv run pytest tests/ -v --cov=src/root_cause_analysis
+```
+
+Tests cover data schema validation, value ranges, one-root-cause-per-incident invariant, and generator reproducibility.
 
 ## Related Projects
 
-| # | Project | Description |
-|---|---------|-------------|
-| 1 | [Churn Prediction](../01-churn-prediction) | Binary classification to predict customer churn |
-| 2 | **Root Cause Analysis** (this repo) | Multi-class classification for network alarm RCA |
-| 3 | [Anomaly Detection](../03-anomaly-detection) | Unsupervised detection of network anomalies |
-| 4 | [QoE Prediction](../04-qoe-prediction) | Regression to predict quality of experience |
-| 5 | [Capacity Forecasting](../05-capacity-forecasting) | Time-series forecasting for network capacity planning |
-| 6 | [Network Optimization](../06-network-optimization) | Optimization of network resource allocation |
+| Project | Description |
+|---------|-------------|
+| [telecom-ml-framework](https://github.com/adityonugrohoid/telecom-ml-framework) | Spec-first ML project templates and domain-informed data generators for 6 telecom use cases |
+| [telecom-ml-portfolio](https://github.com/adityonugrohoid/telecom-ml-portfolio) | Index of 6 end-to-end telecom ML projects on synthetic network data |
+| [telecom-churn-prediction](https://github.com/adityonugrohoid/telecom-churn-prediction) | Binary classification predicting subscriber churn (XGBoost, AUROC 0.86) |
+| [telecom-anomaly-detection](https://github.com/adityonugrohoid/telecom-anomaly-detection) | Unsupervised cell-level anomaly detection on KPI time-series (Isolation Forest, F1 0.70) |
+| [telecom-qoe-prediction](https://github.com/adityonugrohoid/telecom-qoe-prediction) | Session-level MOS regression from network KPIs (LightGBM, RMSE 0.45) |
+| [telecom-capacity-forecasting](https://github.com/adityonugrohoid/telecom-capacity-forecasting) | Hourly per-cell traffic forecasting (LightGBM, MAPE 14.5%) |
+| [telecom-network-optimization](https://github.com/adityonugrohoid/telecom-network-optimization) | RL-based RAN parameter tuning (Q-Learning, +61% vs random) |
 
 ## License
 
-This project is licensed under the MIT License. See [LICENSE](../LICENSE) for details.
+This project is licensed under the [MIT License](LICENSE).
 
 ## Author
 
-**Adityo Nugroho**
+**Adityo Nugroho** ([@adityonugrohoid](https://github.com/adityonugrohoid))
