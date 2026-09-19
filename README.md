@@ -152,6 +152,18 @@ Feature groups:
 | Accuracy@3 | 1.00 | True root cause in top 3 candidates |
 | MRR | 0.955 | Mean reciprocal rank across 100 test incidents |
 
+### Baseline Comparison
+
+The Methodology section above names "Always-predict-first-alarm" as the baseline. Measured on one incident-level split (seed 42, 500 incidents, 100 test incidents), from `evidence/baseline_metrics.json` (regenerate with `uv run python -m root_cause_analysis.baseline`):
+
+| Metric | Baseline | Model |
+|--------|----------|-------|
+| Accuracy@1 | 0.58 | 0.89 |
+| Accuracy@3 | 1.00 | 1.00 |
+| MRR | 0.767 | 0.945 |
+
+This script measures 0.89 for the model on its split; the 0.91 reported above comes from the notebook run.
+
 ### Top Predictors
 
 1. `throughput_delta` - largest KPI deviation signals originating fault

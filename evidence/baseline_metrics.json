@@ -1,0 +1,29 @@
+{
+  "baseline": {
+    "accuracy": 0.958,
+    "accuracy_at_1": 0.58,
+    "accuracy_at_3": 1.0,
+    "f1": 0.58,
+    "mean_reciprocal_rank": 0.7666666666666666,
+    "precision": 0.58,
+    "recall": 0.58,
+    "roc_auc": 0.9705263157894737
+  },
+  "model": {
+    "accuracy": 0.9825,
+    "accuracy_at_1": 0.89,
+    "accuracy_at_3": 1.0,
+    "f1": 0.8416289592760181,
+    "mean_reciprocal_rank": 0.945,
+    "precision": 0.768595041322314,
+    "recall": 0.93,
+    "roc_auc": 0.9948421052631579
+  },
+  "n_incidents": 500,
+  "n_test_incidents": 100,
+  "n_test_rows": 2000,
+  "n_train_incidents": 400,
+  "n_train_rows": 8000,
+  "primary_metric": "accuracy_at_1",
+  "seed": 42
+}
